@@ -68,7 +68,7 @@ function nbtToString(components: Record<string, string>): string {
 function textDisplayNBT(textDisplay: TextDisplayEntity) {
 	const components: Record<string, string> = {
 		id: `"minecraft:text_display"`,
-		text: `'" "'`,
+		text: `' '`,
 		transformation: mat4NBT(textDisplay.transform),
 		background: colorToSignedInt(textDisplay.color, 1).toString(),
 	}

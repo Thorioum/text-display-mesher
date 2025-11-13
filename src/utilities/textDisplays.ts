@@ -15,17 +15,9 @@ export interface TextDisplayEntity {
 	brightness: TextDisplayBrightness;
 }
 
-export const unitSquare = deepFreeze(new URL(location.href).searchParams.has("legacy") ?
-	// legacy
-	new THREE.Matrix4()
-		.multiply(translationMatrix(-0.1 + 0.5, -0.5 + 0.5, 0))
-		.scale(new THREE.Vector3(8, 4.0, 1))
-	:
-	// modern
-	new THREE.Matrix4()
-		.multiply(translationMatrix(-0.1 * 3.075/8 + 0.5, -0.5 + 0.5, 0))
-		.scale(new THREE.Vector3(3.075, 4.0, 1))
-);
+export const unitSquare = deepFreeze(new THREE.Matrix4()
+	.multiply(translationMatrix(-0.1 + 0.5, -0.5 + 0.5, 0))
+	.scale(new THREE.Vector3(8, 4.0, 1)));
 
 // Left aligned
 export const unitTriangle = deepFreeze([
