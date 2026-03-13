@@ -6,11 +6,14 @@ import { createShadowProvider, meshToTextDisplays } from '../utilities/textDispl
 import { textDisplayTrianglesToMesh } from '../utilities/textDisplayRendering';
 import { textDisplaysToSummonCommands } from '../utilities/textDisplayCommands';
 import Button from '../ui-components/Button.svelte';
-import { debouncedState } from '../utilities/svelteUtilities.svelte';
+import { asyncState, debouncedState } from '../utilities/svelteUtilities.svelte';
 import { fa5_solid_home, fa5_solid_info, fa5_brands_github } from 'fontawesome-svgs';
 import CircleButton from '../ui-components/CircleButton.svelte';
 import { githubRepositoryLink, homeLink } from './links';
 import ModelSelector, { mountainrayMesh } from './ModelSelector.svelte';
+import Worker from './webworker.worker.js?worker';
+import { rpc } from '../utilities/webworkerRpc';
+import { untrack } from 'svelte';
 
 let meshView: "original" | "text" = $state("text");
 
@@ -22,6 +25,8 @@ let lightPosition = $state({ x: 1, y: 1, z: 1 })
 let minBrightness = $state(0.4);
 let maxBrightness = $state(1.0);
 
+const worker = rpc<typeof import('./webworker.worker').default>(new Worker());
+
 const transformedMesh = $derived.by(() => {
 	const transformed = mesh.clone()
 	transformed.applyMatrix4(
@@ -32,23 +37,20 @@ const transformedMesh = $derived.by(() => {
 	return transformed;
 });
 
-const textDisplaysDebounced = debouncedState({
-	delay: 150, 
-	deps: () => [transformedMesh, { ...lightPosition }, minBrightness, maxBrightness],	
-	value: () => meshToTextDisplays(transformedMesh, createShadowProvider({
+let materialUpdateCounter = $state(0);
+const textDisplays = $derived.by(()=> {
+	materialUpdateCounter;
+	return meshToTextDisplays(transformedMesh, createShadowProvider({
 		light: new THREE.Vector3(lightPosition.x, lightPosition.y, lightPosition.z).normalize(),
 		minBrightness,
 		maxBrightness,
 	}))
-})
-
-const textDisplays = $derived(textDisplaysDebounced.value);
-const summonCommandsDebounced = debouncedState({
-	delay: 150, 
-	deps: () => [textDisplays],
-	value: () => textDisplaysToSummonCommands(textDisplays)
 });
-const summonCommands = $derived(summonCommandsDebounced.value);
+const summonCommandsAsync = asyncState(() => worker.textDisplayCommands(textDisplays), {
+	commands: [],
+	batches: [],
+});
+const summonCommands = $derived(summonCommandsAsync.value);
 
 function changeButtonText(event: MouseEvent, text: string) {
 	const button = event.currentTarget as HTMLButtonElement;
@@ -91,7 +93,7 @@ const cameraMaxDistance = $derived.by(() => {
 	<div class="bg-surfaceContainer text-onSurfaceContainer p-4 overflow-y-auto">
 		<ModelSelector
 			bind:mesh={mesh}
-			onUpdateMaterial={() => textDisplaysDebounced.invalidate()}
+			onUpdateMaterial={() => untrack(()=>materialUpdateCounter++)}
 		/>
 
 		<hr class="my-4">
@@ -186,28 +188,43 @@ const cameraMaxDistance = $derived.by(() => {
 		</div>
 		
 		<div>Text Displays: {textDisplays.length}</div>
-		<div>Commands: {summonCommands.commands.length}</div>
+		<div>
+			Commands:
+			{@render numberLoadingIndicator(summonCommands.commands.length, summonCommandsAsync.isLoading)}
+		</div>
 
 		<br>
 
 		<div>Command Lengths:</div>
-		{@render range(summonCommands.commands.map(cmd => cmd.length))}
+		{@render range(summonCommandsAsync.isLoading, summonCommands.commands.map(cmd => cmd.length))}
 
 		<br>
 
 		<div>Entities Per Command:</div>
-		{@render range(summonCommands.batches.map(batch => batch.length))}
+		{@render range(summonCommandsAsync.isLoading, summonCommands.batches.map(batch => batch.length))}
 		<br>
 
-		{#snippet range(items: number[])}
+		{#snippet range(isLoading: boolean, items: number[])}
 			<div>
 				<span class="opacity-40">Min</span>
-				{Math.min(...items)}
+				{@render numberLoadingIndicator(Math.min(...items), isLoading)}
 				<span class="ml-3 opacity-40">Max</span>
-				{Math.max(...items)}
+				{@render numberLoadingIndicator(Math.max(...items), isLoading)}
 				<span class="ml-3 opacity-40">Avg</span>
-				{Math.round(items.reduce((acc, item) => acc + item, 0) / items.length)}
+				{@render numberLoadingIndicator(Math.round(items.reduce((acc, item) => acc + item, 0) / items.length), isLoading)}
 			</div>
+		{/snippet}
+
+		{#snippet numberLoadingIndicator(current: number, isLoading: boolean)}
+			{#if !isLoading}
+				{current}
+			{:else}
+				<span class="inline-grid items-center h-[1lh] align-bottom">
+					<div class="bg-current/20 animate-pulse h-4 rounded">
+						<span class="invisible">{current}</span>
+					</div>
+				</span>
+			{/if}
 		{/snippet}
 
 		<label class="flex justify-between items-center mb-2" for="summon-commands">
