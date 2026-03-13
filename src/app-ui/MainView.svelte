@@ -87,7 +87,7 @@ const cameraMaxDistance = $derived.by(() => {
 
 <div class="
 	md:grid md:grid-cols-[25em_1fr]
-	flex flex-col-reverse [&>*]:flex-1
+	flex flex-col-reverse *:flex-1
 ">
 	<!-- Sidebar -->
 	<div class="bg-surfaceContainer text-onSurfaceContainer p-4 overflow-y-auto">
@@ -219,7 +219,7 @@ const cameraMaxDistance = $derived.by(() => {
 			{#if !isLoading}
 				{current}
 			{:else}
-				<span class="inline-grid items-center h-[1lh] align-bottom">
+				<span class="inline-grid items-center h-lh align-bottom">
 					<div class="bg-current/20 animate-pulse h-4 rounded">
 						<span class="invisible">{current}</span>
 					</div>
@@ -235,7 +235,7 @@ const cameraMaxDistance = $derived.by(() => {
 			<div class="flex gap-2">
 				<Button 
 					variant={'outlined'} 
-					className="!py-1 text-sm"
+					className="py-1! text-sm"
 					onPress={(event) => {
 						const commandText = summonCommands.commands.join('\n');
 						navigator.clipboard.writeText(commandText);

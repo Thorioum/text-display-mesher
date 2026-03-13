@@ -78,21 +78,21 @@
 		<Button 
 			variant={selectedType === 'file' ? 'filled' : 'outlined'} 
 			onPress={() => switchToType('file')}
-			className="!py-1 text-sm"
+			className="py-1! text-sm"
 		>
 			File
 		</Button>
 		<Button 
 			variant={selectedType === 'color' ? 'filled' : 'outlined'} 
 			onPress={() => switchToType('color')}
-			className="!py-1 text-sm"
+			className="py-1! text-sm"
 		>
 			Color
 		</Button>
 		<Button 
 			variant={selectedType === 'random' ? 'filled' : 'outlined'} 
 			onPress={() => switchToType('random')}
-			className="!py-1 text-sm"
+			className="py-1! text-sm"
 		>
 			Random
 		</Button>

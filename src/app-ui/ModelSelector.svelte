@@ -177,7 +177,7 @@
 		] as preset}
 			<Button
 				variant={preset.mesh === mesh ? 'filled' : 'outlined'}
-				className="!py-1 !px-3 text-sm flex-shrink-0"
+				className="py-1! px-3! text-sm shrink-0"
 				onPress={() => mesh = preset.mesh}
 			>
 				{preset.name}
