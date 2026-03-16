@@ -100,6 +100,8 @@ export function meshToTextDisplays(
 ): TextDisplayEntity[] {
 	// using _ = benchmark("meshToTextDisplays");
 
+	mesh.updateWorldMatrix(true, true);
+	
 	const triangulated = getTrianglesFromObject(mesh);
 
 	// Convert materials to shaders

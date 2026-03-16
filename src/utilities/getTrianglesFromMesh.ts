@@ -61,9 +61,9 @@ function getTrianglesFromMesh(mesh: THREE.Mesh): MeshTriangle[] {
 		const material = mesh.material instanceof Array ? mesh.material[0]! : mesh.material;
 
 		triangles.push(new MeshTriangle(
-			getMeshVertex(positionAttribute, uvAttribute, firstIndex, material),
-			getMeshVertex(positionAttribute, uvAttribute, secondIndex, material),
-			getMeshVertex(positionAttribute, uvAttribute, thirdIndex, material),
+			getMeshVertex(mesh,positionAttribute, uvAttribute, firstIndex, material),
+			getMeshVertex(mesh,positionAttribute, uvAttribute, secondIndex, material),
+			getMeshVertex(mesh,positionAttribute, uvAttribute, thirdIndex, material),
 		));
 	}
 	
@@ -71,13 +71,20 @@ function getTrianglesFromMesh(mesh: THREE.Mesh): MeshTriangle[] {
 }
 
 function getMeshVertex(
+	mesh: THREE.Mesh,
 	positionAttribute: THREE.BufferAttribute,
 	uvAttribute: THREE.BufferAttribute | undefined,
 	index: number,
 	material: THREE.Material
 ): MeshVertex {
+	const pos = getVec3(positionAttribute, index);
+
+	if (mesh instanceof THREE.SkinnedMesh) {
+		mesh.applyBoneTransform(index, pos);
+	}
+
 	return {
-		position: getVec3(positionAttribute, index),
+		position: pos,
 		uv: uvAttribute ? getVec2(uvAttribute, index) : new THREE.Vector2(0, 0),
 		material: material,
 	};
