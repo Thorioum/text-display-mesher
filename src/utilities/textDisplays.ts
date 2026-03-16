@@ -127,7 +127,7 @@ export function meshToTextDisplays(
 		const shaders = materialsToShaders.get(material)!;
 		
 		const emissiveColor = shaders.emissive(triangle);
-		const emission = emissiveColor.r + emissiveColor.g + emissiveColor.b / 3;
+		const emission = (emissiveColor.r + emissiveColor.g + emissiveColor.b) / 3;
 		
 		
 		const color = shadowProvider(shaders.texture(triangle), normal, emission)
