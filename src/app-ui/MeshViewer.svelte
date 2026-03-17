@@ -2,12 +2,32 @@
 import { onMount } from 'svelte';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import type { TextDisplayEntity } from '../utilities/textDisplays';
+import type { TextDisplayAnimation } from '../utilities/textDisplayAnimations';
+import { createAnimatedTextDisplayPreview } from '../utilities/textDisplayAnimationPreview';
 
-let { model, maxDistance, lightPosition }: {
-	model: THREE.Object3D;
+let {
+	originalModel,
+	textDisplayModel,
+	textDisplays = [],
+	animations = [],
+	selectedAnimationIndex = 0,
+	playAnimation = false,
+	maxDistance,
+	lightPosition,
+}: {
+	originalModel: THREE.Object3D;
+	textDisplayModel: THREE.Object3D;
+	textDisplays: TextDisplayEntity[];
+	animations: TextDisplayAnimation[];
+	selectedAnimationIndex: number;
+	playAnimation: boolean;
 	maxDistance: number;
 	lightPosition: THREE.Vector3;
 } = $props();
+
+let animatedPreview: ReturnType<typeof createAnimatedTextDisplayPreview> | null = null;
+let animationStartTime = 0;
 
 let canvas: HTMLCanvasElement;
 const scene = new THREE.Scene();
@@ -19,21 +39,40 @@ let animationFrameId: number;
 let clientHeight = $state(1);
 let clientWidth = $state(1);
 
-const sceneObjects = $derived.by(()=>{
+const sceneObjects = $derived.by(() => {
 	const group = new THREE.Group();
-	group.add(model);
 
+	if (playAnimation && textDisplays.length > 0 && animations.length > 0) {
+		animatedPreview = createAnimatedTextDisplayPreview(textDisplays);
+		group.add(animatedPreview.group);
+	} else {
+		animatedPreview = null;
+		group.add(textDisplayModel);
+	}
 
 	const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
 	directionalLight.position.set(lightPosition.x, lightPosition.y, lightPosition.z);
 	group.add(directionalLight);
 
-
 	const ambientLight = new THREE.AmbientLight(0xffffff, 1);
 	group.add(ambientLight);
 
 	return group;
-})
+});
+
+$effect(() => {
+	if (!controls) return;
+
+	if (currentGroup) {
+		scene.remove(currentGroup);
+	}
+
+	currentGroup = sceneObjects;
+	scene.add(sceneObjects);
+
+	animationStartTime = performance.now();
+	controls.maxDistance = maxDistance;
+});
 
 let currentGroup: THREE.Group | null = null;
 
@@ -89,13 +128,38 @@ $effect(() => {
 	controls.maxDistance = maxDistance;
 });
 
+function getLastFrameAtTime<T extends { time: number }>(frames: T[], time: number): T {
+	let result = frames[0]!;
+	for (const frame of frames) {
+		if (frame.time <= time) {
+			result = frame;
+		} else {
+			break;
+		}
+	}
+	return result;
+}
+
 function animate() {
 	animationFrameId = requestAnimationFrame(animate);
+
+	if (playAnimation && animatedPreview && animations.length > 0) {
+		const animation = animations[selectedAnimationIndex] ?? animations[0];
+		if (animation && animation.frames.length > 0 && animation.duration > 0) {
+			const elapsed = (performance.now() - animationStartTime) / 1000;
+			const localTime = elapsed % animation.duration;
+			const frame = getLastFrameAtTime(animation.frames, localTime);
+			animatedPreview.applyFrame(frame);
+		}
+	}
+
 	controls.update();
 	renderer.render(scene, camera);
 }
 
 $effect(() => {
+	if (!camera || !renderer) return;
+
 	camera.aspect = clientWidth / clientHeight;
 	camera.updateProjectionMatrix();
 	renderer.setSize(clientWidth, clientHeight);

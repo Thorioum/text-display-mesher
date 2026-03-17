@@ -1,16 +1,23 @@
 <script lang="ts" module>
+	import phoenixURL from '../assets/phoenix/phoenix-bird.glb?url';
 	import mountainrayModelURL from '../assets/mountainray/model.glb?url';
 	import mountainrayJuvenileModelURL from '../assets/mountainray/juvenile_model.glb?url';
 	import suzanneModelText from '../assets/suzanne/model.obj?raw';
 	import utahTeapot from '../assets/utah-teapot/model.obj?raw';
 
+	const phoenixPromise = new GLTFLoader().loadAsync(phoenixURL);
 	const mountainrayPromise = new GLTFLoader().loadAsync(mountainrayModelURL);
 	const mountainrayJuvenilePromise = new GLTFLoader().loadAsync(mountainrayJuvenileModelURL);
 
+	export const phoenixMesh = fixGLTFMaterials((await phoenixPromise).scene);
+	export const phoenixGLTF = await phoenixPromise;
 	export const mountainrayMesh = fixGLTFMaterials((await mountainrayPromise).scene);
+	export const mountainrayGLTF = await mountainrayPromise;
 	export const mountainrayJuvenileMesh = fixGLTFMaterials((await mountainrayJuvenilePromise).scene);
+	export const mountainrayJuvenileGLTF = await mountainrayJuvenilePromise;
 	export const suzanneMesh = createObjMesh(suzanneModelText, new THREE.MeshStandardMaterial());
 	export const utahTeapotMesh = createObjMesh(utahTeapot, new THREE.MeshStandardMaterial());
+
 	suzanneMesh.applyMatrix4(new THREE.Matrix4().makeScale(0.5, 0.5, 0.5));
 	utahTeapotMesh.applyMatrix4(new THREE.Matrix4().makeScale(0.3, 0.3, 0.3));
 	mountainrayJuvenileMesh.applyMatrix4(new THREE.Matrix4().makeScale(0.5, 0.5, 0.5));
@@ -47,14 +54,15 @@
 <script lang="ts">
 	import * as THREE from 'three';
 	import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
-	import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+	import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 	import Button from '../ui-components/Button.svelte';
 	import FileField from '../ui-components/FileField.svelte';
 	import TextureField from './TextureField.svelte';
 	import { loadImageAsCanvas } from '../utilities/misc';
+    import { parse } from 'svelte/compiler';
 	
-	let { mesh = $bindable(), onUpdateMaterial }: { mesh: THREE.Object3D, onUpdateMaterial: ()=>void } = $props();
-	
+	let { mesh = $bindable(), onUpdateMaterial, gltf = $bindable() }: { mesh: THREE.Object3D, onUpdateMaterial: ()=>void, gltf: GLTF | null } = $props();
+
 	let textureInput: THREE.Color | THREE.Texture = $state(new THREE.Color(0xffffff));
 	let emissionInput: THREE.Texture | undefined = $state(undefined);
 	
@@ -119,8 +127,9 @@
 				URL.revokeObjectURL(url);
 			}
 		});
-
+		
 		mesh = fixGLTFMaterials(loaded.scene)
+		gltf = loaded;
 	}
 </script>
 
@@ -170,15 +179,19 @@
 {#snippet presetTab()}
 	<div class="flex flex-wrap gap-2">
 		{#each [
-			{ name: 'Mountainray', mesh: mountainrayMesh },
-			{ name: 'Mountainray Juvenile', mesh: mountainrayJuvenileMesh },
-			{ name: 'Suzanne', mesh: suzanneMesh },
-			{ name: 'Utah Teapot', mesh: utahTeapotMesh }
+			{ name: 'Phoenix', mesh: phoenixMesh, gltf: phoenixGLTF },
+			{ name: 'Mountainray', mesh: mountainrayMesh, gltf: mountainrayGLTF },
+			{ name: 'Mountainray Juvenile', mesh: mountainrayJuvenileMesh, gltf: mountainrayJuvenileGLTF },
+			{ name: 'Suzanne', mesh: suzanneMesh, gltf: null },
+			{ name: 'Utah Teapot', mesh: utahTeapotMesh, gltf: null },
 		] as preset}
 			<Button
 				variant={preset.mesh === mesh ? 'filled' : 'outlined'}
 				className="py-1! px-3! text-sm shrink-0"
-				onPress={() => mesh = preset.mesh}
+				onPress={() => {
+					mesh = preset.mesh; 
+					gltf = preset.gltf;
+				}}
 			>
 				{preset.name}
 			</Button>
@@ -269,6 +282,7 @@
 				}
 				
 				mesh = createObjMesh(await file?.text() ?? "", objFileMaterial)
+				gltf = null;
 			}}
 		/>
 		

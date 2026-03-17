@@ -4,28 +4,40 @@ import * as THREE from 'three';
 import MeshViewer from './MeshViewer.svelte';
 import { createShadowProvider, meshToTextDisplays } from '../utilities/textDisplays';
 import { textDisplayTrianglesToMesh } from '../utilities/textDisplayRendering';
-import { textDisplaysToSummonCommands } from '../utilities/textDisplayCommands';
 import Button from '../ui-components/Button.svelte';
 import { asyncState, debouncedState } from '../utilities/svelteUtilities.svelte';
 import { fa5_solid_home, fa5_solid_info, fa5_brands_github } from 'fontawesome-svgs';
 import CircleButton from '../ui-components/CircleButton.svelte';
 import { githubRepositoryLink, homeLink } from './links';
-import ModelSelector, { mountainrayMesh } from './ModelSelector.svelte';
+import ModelSelector, { mountainrayMesh, phoenixGLTF, phoenixMesh } from './ModelSelector.svelte';
 import Worker from './webworker.worker.js?worker';
 import { rpc } from '../utilities/webworkerRpc';
 import { untrack } from 'svelte';
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
+    import { gltfToTextDisplayAnimations, type TextDisplayAnimation } from '../utilities/textDisplayAnimations';
+    import { textDisplayAnimationsToCommands } from '../utilities/textDisplayAnimationCommands';
+    import { animatedDatapackToZip, downloadBlob, sanitizeName, staticDatapackToZip } from '../utilities/datapackCreator';
 
 let meshView: "original" | "text" = $state("text");
 
 // Inputs
-let mesh: THREE.Object3D = $state.raw(mountainrayMesh);
+let mesh: THREE.Object3D = $state.raw(phoenixMesh);
+let gltf: GLTF | null = $state.raw(phoenixGLTF);
 let scale = $state({ x: 1, y: 1, z: 1 });
 let translate = $state({ x: 0, y: 0, z: 0 });
 let lightPosition = $state({ x: 1, y: 1, z: 1 })
 let minBrightness = $state(0.4);
 let maxBrightness = $state(1.0);
+let playAnimation = $state(false);
+let selectedAnimationIndex = $state(0);
 
 const worker = rpc<typeof import('./webworker.worker').default>(new Worker());
+
+const modelName = $derived.by(() => {
+	if (gltf?.scene?.name) return sanitizeName(gltf.scene.name);
+	if (mesh?.name) return sanitizeName(mesh.name);
+	return "model";
+});
 
 const transformedMesh = $derived.by(() => {
 	const transformed = mesh.clone()
@@ -46,10 +58,75 @@ const textDisplays = $derived.by(()=> {
 		maxBrightness,
 	}))
 });
-const summonCommandsAsync = asyncState(() => worker.textDisplayCommands(textDisplays), {
+
+
+
+const summonCommandsAsync = asyncState(() => worker.textDisplayCreationCommands(textDisplays), {
 	commands: [],
 	batches: [],
 });
+
+const capturedGltf = $derived.by(() => {
+	return gltf
+});
+
+const animationSummaries = $derived.by(() => {
+	if (!gltf) return [];
+
+	return gltf.animations.map((animation) => ({
+		name: animation.name || 'Unnamed Animation',
+		duration: animation.duration,
+	}));
+});
+
+let parsedAnimations: TextDisplayAnimation[] | null = $state(null);
+let animationParseInProgress = $state(false);
+let animationParseError: string | null = $state(null);
+
+$effect(() => {
+	gltf;
+	mesh;
+	scale.x; scale.y; scale.z;
+	translate.x; translate.y; translate.z;
+	lightPosition.x; lightPosition.y; lightPosition.z;
+	minBrightness; maxBrightness;
+	materialUpdateCounter;
+
+	parsedAnimations = null;
+	animationParseError = null;
+	playAnimation = false;
+	selectedAnimationIndex = 0;
+});
+async function ensureAnimationsParsed() {
+	if (!gltf || parsedAnimations || animationParseInProgress) return;
+
+	animationParseInProgress = true;
+	animationParseError = null;
+
+	try {
+		parsedAnimations = await Promise.resolve(
+			gltfToTextDisplayAnimations(gltf,{
+				lightPosition: {
+					x: lightPosition.x,
+					y: lightPosition.y,
+					z: lightPosition.z,
+				},
+				minBrightness,
+				maxBrightness,
+			})
+		);
+	} catch (error) {
+		console.error('Failed to parse animations:', error);
+		animationParseError = error instanceof Error ? error.message : String(error);
+	} finally {
+		animationParseInProgress = false;
+	}
+}
+const animationCommands = $derived.by(() => {
+	if (!parsedAnimations) return [];
+	return textDisplayAnimationsToCommands(parsedAnimations);
+});
+
 const summonCommands = $derived(summonCommandsAsync.value);
 
 function changeButtonText(event: MouseEvent, text: string) {
@@ -62,6 +139,50 @@ function changeButtonText(event: MouseEvent, text: string) {
 	setTimeout(() => button.textContent = originalText, 2000);
 }
 
+async function downloadStaticDatapackZip() {
+	try {
+		const zipBlob = await staticDatapackToZip({
+			name: modelName,
+			summonCommands: summonCommands.commands,
+		});
+
+		downloadBlob(zipBlob, `${modelName}.zip`);
+	} catch (error) {
+		console.error("Failed to download static datapack zip:", error);
+		animationParseError = error instanceof Error ? error.message : String(error);
+	}
+}
+async function downloadAnimatedDatapackZip() {
+	try {
+		if (!parsedAnimations) {
+			await ensureAnimationsParsed();
+		}
+
+		if (!parsedAnimations) {
+			throw new Error("Animations were not parsed.");
+		}
+
+		const selectedParsedAnimation = parsedAnimations[selectedAnimationIndex];
+		if (!selectedParsedAnimation) {
+			throw new Error("Selected animation was not found.");
+		}
+
+		const animationCommands = textDisplayAnimationsToCommands([
+			selectedParsedAnimation,
+		]);
+
+		const zipBlob = await animatedDatapackToZip({
+			name: modelName,
+			summonCommands: summonCommands.commands,
+			animations: animationCommands,
+		});
+
+		downloadBlob(zipBlob, `${modelName}.zip`);
+	} catch (error) {
+		console.error("Failed to download animated datapack zip:", error);
+		animationParseError = error instanceof Error ? error.message : String(error);
+	}
+}
 console.group("For debugging, use these variables.");
 console.log("mesh");
 console.log("transformedMesh");
@@ -93,11 +214,70 @@ const cameraMaxDistance = $derived.by(() => {
 	<div class="bg-surfaceContainer text-onSurfaceContainer p-4 overflow-y-auto">
 		<ModelSelector
 			bind:mesh={mesh}
+			bind:gltf={gltf}
 			onUpdateMaterial={() => untrack(()=>materialUpdateCounter++)}
 		/>
 
 		<hr class="my-4">
 	
+		{#if animationSummaries.length > 0}
+			<div class="mt-3 flex items-center gap-2 flex-wrap">
+				<select bind:value={selectedAnimationIndex} class="border rounded px-2 py-1">
+					{#each animationSummaries as animation, index}
+						<option value={index}>{animation.name}</option>
+					{/each}
+				</select>
+
+				<Button
+					variant={playAnimation ? 'filled' : 'outlined'}
+					onPress={async () => {
+						if (playAnimation) {
+							playAnimation = false;
+							return;
+						}
+
+						await ensureAnimationsParsed();
+
+						if (parsedAnimations && parsedAnimations[selectedAnimationIndex]) {
+							playAnimation = true;
+						}
+					}}
+				>
+					{#if animationParseInProgress}
+						Parsing...
+					{:else if playAnimation}
+						Pause Animation
+					{:else}
+						Play Animation
+					{/if}
+				</Button>
+			</div>
+
+			<div class="mt-2 flex gap-2 flex-wrap">
+				<Button
+					variant="outlined"
+					onPress={downloadAnimatedDatapackZip}
+				>
+					Download Animated
+				</Button>
+
+				<Button
+					variant="outlined"
+					onPress={downloadStaticDatapackZip}
+				>
+					Download Static
+				</Button>
+			</div>
+
+			{#if animationParseError}
+				<div class="mt-2 text-sm text-error-700">
+					Failed to parse animations: {animationParseError}
+				</div>
+			{/if}
+		{/if}
+
+		<hr class="my-4">
+		
 		<h3 class="text-lg font-semibold">Transform</h3>
 	
 		<div class="mb-3">
@@ -188,6 +368,7 @@ const cameraMaxDistance = $derived.by(() => {
 		</div>
 		
 		<div>Text Displays: {textDisplays.length}</div>
+		<div>Animations: {animationSummaries.length}</div>
 		<div>
 			Commands:
 			{@render numberLoadingIndicator(summonCommands.commands.length, summonCommandsAsync.isLoading)}
@@ -263,8 +444,13 @@ const cameraMaxDistance = $derived.by(() => {
 	
 	<!-- Model Viewer -->
 	<div class="relative">
-		<MeshViewer 
-			model={meshView === 'original' ? transformedMesh : textDisplayTrianglesToMesh(textDisplays)}
+		<MeshViewer
+			originalModel={transformedMesh}
+			textDisplayModel={textDisplayTrianglesToMesh(textDisplays)}
+			textDisplays={textDisplays}
+			animations={parsedAnimations ?? []}
+			selectedAnimationIndex={selectedAnimationIndex}
+			playAnimation={meshView === 'text' && playAnimation}
 			maxDistance={cameraMaxDistance}
 			lightPosition={new THREE.Vector3(lightPosition.x, lightPosition.y, lightPosition.z).normalize()}
 		/>

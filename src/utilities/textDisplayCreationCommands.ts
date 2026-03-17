@@ -4,55 +4,65 @@ import { benchmark } from "./misc";
 
 
 export function textDisplaysToSummonCommands(textDisplays: TextDisplayEntity[], {
-	//maxPassengers = Infinity,
 	maxCommandLength = 32500,
-}= {}) {
-	// using _ = benchmark("textDisplaysToSummonCommand");
-
+} = {}) {
 	const commands: string[] = [];
 	const containerPosition = "~ ~ ~";
 
-	const summonCommand = (batch: TextDisplayEntity[])=>{
+	const summonCommand = (batch: TextDisplayEntity[], startIndex: number) => {
 		if (batch.length === 0) return "";
 
-		const containerNBT = textDisplayNBT(batch[0]!);
-		const passengersNBT = batch.slice(1).map(i => nbtToString(textDisplayNBT(i))).join(",")
+		const containerNBT = textDisplayNBT(batch[0]!, startIndex.toString());
+
+		const passengersNBT = batch
+			.slice(1)
+			.map((entity, localIndex) =>
+				nbtToString(textDisplayNBT(entity, (startIndex + localIndex + 1).toString()))
+			)
+			.join(",");
 
 		delete containerNBT.id;
 		if (passengersNBT.length) containerNBT.Passengers = `[${passengersNBT}]`;
+
 		return `summon minecraft:text_display ${containerPosition} ${nbtToString(containerNBT)}`;
-	}
+	};
+
 	const batchFits = (command: string, _batch: TextDisplayEntity[]) => {
-		return command.length <= maxCommandLength;// && batch.length <= maxPassengers;
-	}
+		return command.length <= maxCommandLength;
+	};
 
 	let added = 0;
-	
 	let expectedBatchSize = maxCommandLength / 100;
 
 	const batches: TextDisplayEntity[][] = [];
 
 	while (added < textDisplays.length) {
-		// Create batch with expected size
-		const currentBatch = textDisplays.slice(added, Math.min(added + expectedBatchSize, textDisplays.length));
+		const currentBatch = textDisplays.slice(
+			added,
+			Math.min(added + expectedBatchSize, textDisplays.length)
+		);
 		added += currentBatch.length;
-		
-		
-		let currentCommand;
 
-		// keep adding to the current batch until it no longer fits
-		while (batchFits(currentCommand = summonCommand(currentBatch), currentBatch) && added < textDisplays.length) {
+		const batchStartIndex = added - currentBatch.length;
+
+		let currentCommand = "";
+
+		while (
+			batchFits(currentCommand = summonCommand(currentBatch, batchStartIndex), currentBatch) &&
+			added < textDisplays.length
+		) {
 			currentBatch.push(textDisplays[added]!);
 			added++;
 		}
 
-		// pop until it fits again
-		while (!batchFits(currentCommand = summonCommand(currentBatch), currentBatch) && currentBatch.length > 0) {
+		while (
+			!batchFits(currentCommand = summonCommand(currentBatch, batchStartIndex), currentBatch) &&
+			currentBatch.length > 0
+		) {
 			currentBatch.pop();
 			added--;
 		}
 
-		// add the current batch to the commands
 		expectedBatchSize = currentBatch.length;
 		commands.push(currentCommand);
 		batches.push(currentBatch);
@@ -65,12 +75,13 @@ function nbtToString(components: Record<string, string>): string {
 	return `{${Object.entries(components).map(([key, value]) => `${key}:${value}`).join(",")}}`;
 }
 
-function textDisplayNBT(textDisplay: TextDisplayEntity) {
+function textDisplayNBT(textDisplay: TextDisplayEntity, tag: string) {
 	const components: Record<string, string> = {
 		id: `"minecraft:text_display"`,
 		text: `' '`,
 		transformation: mat4NBT(textDisplay.transform),
 		background: colorToSignedInt(textDisplay.color, 1).toString(),
+		Tags: "[\"" + tag + "\"]"
 	}
 
 	if (textDisplay.brightness.sky !== 15 || textDisplay.brightness.block !== 0) {
@@ -88,10 +99,7 @@ function colorToSignedInt(color: THREE.Color, alpha: number = 1): number {
 	const a = Math.round(alpha * 255);
 
 	const unsignedInt = (a << 24) | (r << 16) | (g << 8) | b;
-
-	// Convert to signed 32-bit int (two's complement)
-	// JavaScript bitwise operations work on 32-bit signed integers,
-	// so this conversion happens automatically when we use the value
+	
 	return unsignedInt;
 }
 
@@ -117,6 +125,6 @@ function mat4NBT(mat: THREE.Matrix4): string {
 }
 
 function floatNBT(value: number): string {
-	const rounded = Math.round(value * 1_000_000_0) / 1_000_000_0;
+	const rounded = Math.round(value * 1_000_000_000) / 1_000_000_000;
 	return `${rounded}f`;
 }
