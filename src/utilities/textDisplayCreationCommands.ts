@@ -3,8 +3,8 @@ import type { TextDisplayEntity } from "./textDisplays";
 import { benchmark } from "./misc";
 
 
-export function textDisplaysToSummonCommands(textDisplays: TextDisplayEntity[], {
-	maxCommandLength = 32500,
+export function textDisplaysToSummonCommands(textDisplays: TextDisplayEntity[], extraTags: string[] =[], {
+	maxCommandLength = 30000,
 } = {}) {
 	const commands: string[] = [];
 	const containerPosition = "~ ~ ~";
@@ -12,19 +12,19 @@ export function textDisplaysToSummonCommands(textDisplays: TextDisplayEntity[], 
 	const summonCommand = (batch: TextDisplayEntity[], startIndex: number) => {
 		if (batch.length === 0) return "";
 
-		const containerNBT = textDisplayNBT(batch[0]!, startIndex.toString());
+		const containerNBT = textDisplayNBT(batch[0]!, [extraTags,startIndex.toString()].flat());
 
 		const passengersNBT = batch
 			.slice(1)
 			.map((entity, localIndex) =>
-				nbtToString(textDisplayNBT(entity, (startIndex + localIndex + 1).toString()))
+				nbtToString(textDisplayNBT(entity, [extraTags,(startIndex + localIndex + 1).toString()].flat()))
 			)
 			.join(",");
 
 		delete containerNBT.id;
 		if (passengersNBT.length) containerNBT.Passengers = `[${passengersNBT}]`;
 
-		return `summon minecraft:text_display ${containerPosition} ${nbtToString(containerNBT)}`;
+		return `summon text_display ${containerPosition} ${nbtToString(containerNBT)}`;
 	};
 
 	const batchFits = (command: string, _batch: TextDisplayEntity[]) => {
@@ -75,13 +75,23 @@ function nbtToString(components: Record<string, string>): string {
 	return `{${Object.entries(components).map(([key, value]) => `${key}:${value}`).join(",")}}`;
 }
 
-function textDisplayNBT(textDisplay: TextDisplayEntity, tag: string) {
+function textDisplayNBT(textDisplay: TextDisplayEntity, tags: string[]) {
+
+	let tagsStr = "[";
+	for(let i = 0; i < tags.length; i++) {
+		tagsStr += "\"" + tags[i] + "\"";
+		if(i !== tags.length - 1) {
+			tagsStr += ",";
+		}
+	}
+	tagsStr += "]";
+
 	const components: Record<string, string> = {
-		id: `"minecraft:text_display"`,
+		id: `"text_display"`,
 		text: `' '`,
 		transformation: mat4NBT(textDisplay.transform),
 		background: colorToSignedInt(textDisplay.color, 1).toString(),
-		Tags: "[\"" + tag + "\"]"
+		Tags: tagsStr
 	}
 
 	if (textDisplay.brightness.sky !== 15 || textDisplay.brightness.block !== 0) {
@@ -125,6 +135,5 @@ function mat4NBT(mat: THREE.Matrix4): string {
 }
 
 function floatNBT(value: number): string {
-	const rounded = Math.round(value * 1_000_000_000) / 1_000_000_000;
-	return `${rounded}f`;
+	return `${parseFloat(value.toFixed(7))}f`;
 }

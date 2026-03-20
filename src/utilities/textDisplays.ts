@@ -207,7 +207,7 @@ export function meshToTextDisplays(
 		};
 	});
 
-	const mergeParallelograms = false;
+	const mergeParallelograms = true;
 
 	const patches = mergeParallelograms
 		? mergeAdjacentTrianglesToParallelograms(triangleRenderData, options)

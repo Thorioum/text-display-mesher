@@ -39,6 +39,7 @@ export function createAnimatedTextDisplayPreview(
 		const mesh = new THREE.Mesh(geometry, material);
 		mesh.matrixAutoUpdate = false;
 		mesh.matrix.copy(textDisplay.transform);
+		mesh.matrixWorldNeedsUpdate = true;
 
 		group.add(mesh);
 		objects.push(mesh);
@@ -48,20 +49,26 @@ export function createAnimatedTextDisplayPreview(
 		group,
 		objects,
 		applyFrame(frame) {
-			for (const delta of frame.deltas) {
-                const object = objects[delta.index];
-                if (!object) continue;
+			const frameDisplays = frame.textDisplays;
 
-                object.matrix.copy(delta.transform);
-                object.matrixWorldNeedsUpdate = true;
+			if (frameDisplays.length !== objects.length) {
+				throw new Error(
+					`Animated preview frame has ${frameDisplays.length} displays, but preview has ${objects.length} objects.`
+				);
+			}
 
-                if (delta.color) {
-                    const material = object.material;
-                    if (material instanceof THREE.MeshBasicMaterial) {
-                        material.color.copy(delta.color);
-                    }
-                }
-            }
+			for (let i = 0; i < frameDisplays.length; i++) {
+				const display = frameDisplays[i]!;
+				const object = objects[i]!;
+				const material = object.material;
+
+				object.matrix.copy(display.transform);
+				object.matrixWorldNeedsUpdate = true;
+
+				if (material instanceof THREE.MeshBasicMaterial) {
+					material.color.copy(display.color);
+				}
+			}
 		},
 	};
 }

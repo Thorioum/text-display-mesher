@@ -6,7 +6,7 @@ import { serve } from '../utilities/webworkerRpc';
 
 export default serve({
 	textDisplayCreationCommands: async (textDisplays: TextDisplayEntity[], options?: { maxCommandLength?: number }) => {
-		return textDisplaysToSummonCommands(textDisplays, options);
+		return textDisplaysToSummonCommands(textDisplays,[], options);
 	},
 	textDisplayAnimationCommands: async (gltf: GLTF, options: TextDisplayAnimationOptions) => {
 		return gltfToTextDisplayAnimations(gltf, options);

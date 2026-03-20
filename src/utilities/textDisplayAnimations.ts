@@ -3,15 +3,9 @@ import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { TextDisplayEntity } from "./textDisplays";
 import { meshToTextDisplays } from "./textDisplays";
 
-export interface TextDisplayFrameDelta {
-	index: number;
-	transform: THREE.Matrix4;
-	color?: THREE.Color;
-}
-
 export interface TextDisplayAnimationFrame {
 	time: number;
-	deltas: TextDisplayFrameDelta[];
+	textDisplays: TextDisplayEntity[];
 }
 
 export interface TextDisplayAnimation {
@@ -25,14 +19,10 @@ export interface TextDisplayAnimationOptions {
 	minBrightness: number;
 	maxBrightness: number;
 	meshToTextDisplayOptions?: Parameters<typeof meshToTextDisplays>[2];
-	matrixEpsilon?: number;
-	includeFirstFrame?: boolean;
 	restoreOriginalPose?: boolean;
 }
 
 const DEFAULT_OPTIONS = {
-	matrixEpsilon: 1e-6,
-	includeFirstFrame: true,
 	restoreOriginalPose: true,
 };
 
@@ -49,8 +39,6 @@ export function gltfToTextDisplayAnimations(
         minBrightness,
         maxBrightness,
         meshToTextDisplayOptions,
-        matrixEpsilon,
-        includeFirstFrame,
         restoreOriginalPose,
     } = { ...DEFAULT_OPTIONS, ...options };
 
@@ -90,7 +78,7 @@ export function gltfToTextDisplayAnimations(
 			const sampleTimes = getClipSampleTimes(clip);
 			const frames: TextDisplayAnimationFrame[] = [];
 
-			let previousDisplays: TextDisplayEntity[] | null = null;
+			let expectedDisplayCount: number | null = null;
 
 			for (let frameIndex = 0; frameIndex < sampleTimes.length; frameIndex++) {
 				const time = sampleTimes[frameIndex]!;
@@ -100,24 +88,24 @@ export function gltfToTextDisplayAnimations(
 
 				const currentDisplays = meshToTextDisplays(root, shadowProvider, meshToTextDisplayOptions);
 
-				if (previousDisplays !== null && previousDisplays.length !== currentDisplays.length) {
+				if (expectedDisplayCount === null) {
+					expectedDisplayCount = currentDisplays.length;
+				} else if (expectedDisplayCount !== currentDisplays.length) {
 					throw new Error(
-						`Animation "${clip.name}" produced a different text display count between frames (${previousDisplays.length} -> ${currentDisplays.length}). ` +
+						`Animation "${clip.name}" produced a different text display count between frames (${expectedDisplayCount} -> ${currentDisplays.length}). ` +
 						`Use deterministic merging or disable approximate merging for animation export.`
 					);
 				}
 
-				const deltas =
-					previousDisplays === null
-						? (includeFirstFrame ? fullFrameDeltas(currentDisplays) : [])
-						: diffTextDisplayFrames(previousDisplays, currentDisplays, matrixEpsilon);
-
 				frames.push({
 					time,
-					deltas,
+					textDisplays: currentDisplays.map(display => ({
+						...display,
+						color: display.color.clone(),
+						transform: display.transform.clone(),
+						brightness: { ...display.brightness },
+					})),
 				});
-
-				previousDisplays = currentDisplays;
 			}
 
 			action.stop();
@@ -166,60 +154,6 @@ function sampleAnimationAtTime(
 
 	// force evaluation of animated transforms
 	action.paused = true;
-}
-
-function fullFrameDeltas(displays: TextDisplayEntity[]): TextDisplayFrameDelta[] {
-	return displays.map((display, index) => ({
-		index,
-		transform: display.transform.clone(),
-		color: display.color.clone(),
-	}));
-}
-
-function diffTextDisplayFrames(
-	previous: TextDisplayEntity[],
-	current: TextDisplayEntity[],
-	matrixEpsilon: number,
-	colorEpsilon = 1 / 255,
-): TextDisplayFrameDelta[] {
-	const deltas: TextDisplayFrameDelta[] = [];
-
-	for (let i = 0; i < current.length; i++) {
-		const prev = previous[i]!;
-		const curr = current[i]!;
-
-		const transformChanged = !matrixApproximatelyEquals(prev.transform, curr.transform, matrixEpsilon);
-		const colorChanged = !colorApproximatelyEquals(prev.color, curr.color, colorEpsilon);
-
-		if (transformChanged || colorChanged) {
-			deltas.push({
-				index: i,
-				transform: curr.transform.clone(),
-				color: colorChanged ? curr.color.clone() : undefined,
-			});
-		}
-	}
-
-	return deltas;
-}
-function colorApproximatelyEquals(a: THREE.Color, b: THREE.Color, epsilon: number): boolean {
-	return (
-		Math.abs(a.r - b.r) <= epsilon &&
-		Math.abs(a.g - b.g) <= epsilon &&
-		Math.abs(a.b - b.b) <= epsilon
-	);
-}
-function matrixApproximatelyEquals(a: THREE.Matrix4, b: THREE.Matrix4, epsilon: number): boolean {
-	const ae = a.elements;
-	const be = b.elements;
-
-	for (let i = 0; i < 16; i++) {
-		if (Math.abs(ae[i]! - be[i]!) > epsilon) {
-			return false;
-		}
-	}
-
-	return true;
 }
 
 function captureOriginalLocalMatrices(root: THREE.Object3D): Map<THREE.Object3D, THREE.Matrix4> {

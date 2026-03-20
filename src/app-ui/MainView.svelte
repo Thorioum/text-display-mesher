@@ -252,14 +252,19 @@ const cameraMaxDistance = $derived.by(() => {
 					{/if}
 				</Button>
 			</div>
+		{/if}
 
-			<div class="mt-2 flex gap-2 flex-wrap">
+
+		<div class="mt-2 flex gap-2 flex-wrap">
+			{#if animationSummaries.length > 0}
+
 				<Button
 					variant="outlined"
 					onPress={downloadAnimatedDatapackZip}
 				>
 					Download Animated
 				</Button>
+			{/if}
 
 				<Button
 					variant="outlined"
@@ -267,14 +272,8 @@ const cameraMaxDistance = $derived.by(() => {
 				>
 					Download Static
 				</Button>
-			</div>
 
-			{#if animationParseError}
-				<div class="mt-2 text-sm text-error-700">
-					Failed to parse animations: {animationParseError}
-				</div>
-			{/if}
-		{/if}
+		</div>
 
 		<hr class="my-4">
 		
